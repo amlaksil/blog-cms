@@ -92,4 +92,28 @@ class MediaApiTest extends IntegrationTest {
         call(delete("/api/v1/media/" + id)).andExpect(status().isNoContent());
         mockMvc.perform(get(media.path("url").asText())).andExpect(status().isNotFound());
     }
+
+    @Test
+    void inlineImageCannotBeDeletedWhenContentOmitsMediaId() throws Exception {
+        JsonNode media = upload(
+            "inline-without-id.png",
+            "image/png",
+            TestImages.encode("png", 20, 20));
+
+        // The URL points to a real library image, but mediaId is omitted.
+        Map<String, Object> image = Map.of(
+            "type", "image",
+            "attrs", Map.of("src", media.path("url").asText()));
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("title", "Inline image without mediaId");
+        body.put("content", Map.of("type", "doc", "content", List.of(image)));
+
+        call(post("/api/v1/posts"), body)
+            .andExpect(status().isCreated());
+
+        call(delete("/api/v1/media/" + media.path("id").asText()))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.errors[0].errorCode").value("MEDIA_IN_USE"));
+    }
 }

@@ -52,6 +52,25 @@ class ContentAnalyzerTest {
     }
 
     @Test
+    void collectsLibraryImageIdFromUrlWhenMediaIdIsMissing() throws Exception {
+        UUID id = UUID.randomUUID();
+
+        var analysis = ContentAnalyzer.analyze(parse(
+                "{'type':'doc','content':[{'type':'image','attrs':{'src':'/api/v1/media/"
+                        + id + "/file'}}]}"));
+
+        assertThat(analysis.imageIds()).containsExactly(id);
+    }
+
+    @Test
+    void doesNotInferMediaIdFromExternalImageUrl() throws Exception {
+        var analysis = ContentAnalyzer.analyze(parse(
+                "{'type':'doc','content':[{'type':'image','attrs':{'src':'https://example.com/a.png'}}]}"));
+
+        assertThat(analysis.imageIds()).isEmpty();
+    }
+
+    @Test
     void rejectsUnsafeUrls() {
         assertThatThrownBy(() -> ContentAnalyzer.analyze(parse(
                 "{'type':'doc','content':[{'type':'image','attrs':{'src':'data:image/svg+xml;base64,AAAA'}}]}")))

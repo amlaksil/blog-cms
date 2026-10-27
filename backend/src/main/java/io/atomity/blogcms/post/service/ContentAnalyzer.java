@@ -28,6 +28,8 @@ public final class ContentAnalyzer {
     private static final Pattern SAFE_LINK = Pattern.compile("^(https?://|mailto:|/|#).*", Pattern.CASE_INSENSITIVE);
     /** Images must come from the web or this server's media endpoint — never data: or javascript: URLs. */
     private static final Pattern SAFE_IMAGE_SRC = Pattern.compile("^(https?://|/).*", Pattern.CASE_INSENSITIVE);
+    private static final String MEDIA_URL_PREFIX = "/api/v1/media/";
+    private static final String MEDIA_URL_SUFFIX = "/file";
 
     public record Analysis(String text, int wordCount, int readingTimeMinutes, Set<UUID> imageIds) {
         public boolean isEmpty() {
@@ -96,16 +98,28 @@ public final class ContentAnalyzer {
 
     private static void checkImage(JsonNode image, Set<UUID> imageIds) {
         JsonNode attrs = image.path("attrs");
-        String src = attrs.path("src").asText("").strip().toLowerCase(Locale.ROOT);
-        if (!SAFE_IMAGE_SRC.matcher(src).matches()) {
+        String src = attrs.path("src").asText("").strip();
+        if (!SAFE_IMAGE_SRC.matcher(src.toLowerCase(Locale.ROOT)).matches()) {
             throw ApiException.badRequest("UNSAFE_IMAGE", "Images must use an http(s) URL or come from the media library");
         }
+
         String mediaId = attrs.path("mediaId").asText(null);
         if (mediaId != null && !mediaId.isBlank()) {
             try {
                 imageIds.add(UUID.fromString(mediaId));
             } catch (IllegalArgumentException e) {
                 throw ApiException.badRequest("INVALID_CONTENT", "An image references an invalid media id");
+            }
+            return;
+        }
+
+        // Recover a missing mediaId only from the canonical media-library URL.
+        if (src.startsWith(MEDIA_URL_PREFIX) && src.endsWith(MEDIA_URL_SUFFIX)) {
+            String id = src.substring(MEDIA_URL_PREFIX.length(), src.length() - MEDIA_URL_SUFFIX.length());
+            try {
+                imageIds.add(UUID.fromString(id));
+            } catch (IllegalArgumentException ignored) {
+                // The path does not contain a valid media UUID.
             }
         }
     }
