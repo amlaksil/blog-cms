@@ -28,6 +28,10 @@ public final class ContentAnalyzer {
     private static final Pattern SAFE_LINK = Pattern.compile("^(https?://|mailto:|/|#).*", Pattern.CASE_INSENSITIVE);
     /** Images must come from the web or this server's media endpoint — never data: or javascript: URLs. */
     private static final Pattern SAFE_IMAGE_SRC = Pattern.compile("^(https?://|/).*", Pattern.CASE_INSENSITIVE);
+    /** Canonical URL for an image stored in this server's media library. */
+    private static final Pattern MEDIA_IMAGE_SRC = Pattern.compile(
+            "^/api/v1/media/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/file$",
+            Pattern.CASE_INSENSITIVE);
 
     public record Analysis(String text, int wordCount, int readingTimeMinutes, Set<UUID> imageIds) {
         public boolean isEmpty() {
@@ -103,7 +107,13 @@ public final class ContentAnalyzer {
         String mediaId = attrs.path("mediaId").asText(null);
         if (mediaId != null && !mediaId.isBlank()) {
             try {
-                imageIds.add(UUID.fromString(mediaId));
+                UUID id = UUID.fromString(mediaId);
+                var mediaUrl = MEDIA_IMAGE_SRC.matcher(src);
+                if (mediaUrl.matches() && !id.equals(UUID.fromString(mediaUrl.group(1)))) {
+                    throw ApiException.badRequest(
+                            "INVALID_CONTENT", "An image's media id must match its source URL");
+                }
+                imageIds.add(id);
             } catch (IllegalArgumentException e) {
                 throw ApiException.badRequest("INVALID_CONTENT", "An image references an invalid media id");
             }

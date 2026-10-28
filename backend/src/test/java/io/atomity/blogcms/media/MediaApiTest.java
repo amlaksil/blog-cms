@@ -92,4 +92,20 @@ class MediaApiTest extends IntegrationTest {
         call(delete("/api/v1/media/" + id)).andExpect(status().isNoContent());
         mockMvc.perform(get(media.path("url").asText())).andExpect(status().isNotFound());
     }
+
+    @Test
+    void rejectsInlineImageWhenMediaIdDoesNotMatchSourceUrl() throws Exception {
+        JsonNode imageA = upload("image-a.png", "image/png", TestImages.encode("png", 20, 20));
+        JsonNode imageB = upload("image-b.png", "image/png", TestImages.encode("png", 20, 20));
+
+        Map<String, Object> image = Map.of("type", "image",
+                "attrs", Map.of("src", imageA.path("url").asText(), "mediaId", imageB.path("id").asText()));
+        Map<String, Object> body = new HashMap<>();
+        body.put("title", "Mismatched inline image");
+        body.put("content", Map.of("type", "doc", "content", List.of(image)));
+
+        call(post("/api/v1/posts"), body)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].errorCode").value("INVALID_CONTENT"));
+    }
 }
